@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Pelaksanaan TKA - SMPN 5 Sajira</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- SheetJS for Excel Import/Export -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .exam-radio:checked + div { background-color: #dbeafe; border-color: #3b82f6; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // ==========================================
+        // 1. DATABASE LAYER (IndexedDB)
+        // ==========================================
+        const DB_NAME = 'TKASMP_DB';
+        const DB_VERSION = 2;
+
+        const dbHelper = {
+            init: () => {
+                return new Promise((resolve, reject) => {
+                    const request = indexedDB.open(DB_NAME, DB_VERSION);
+                    request.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains('users')) {
+                            const users = db.createObjectStore('users', { keyPath: 'id' });
+                            users.createIndex('username', 'username', { unique: true });
+                        }
+                        if (!db.objectStoreNames.contains('questions')) {
+                            db.createObjectStore('questions', { keyPath: 'id' });
+                        }
+                        if (!db.objectStoreNames.contains('packages')) {
+                            db.createObjectStore('packages', { keyPath: 'id' });
+                        }
+                        if (!db.objectStoreNames.contains('sessions')) {
+                            db.createObjectStore('sessions', { keyPath: 'id' });
+                        }
+                        if (!db.objectStoreNames.contains('results')) {
+                            db.createObjectStore('results', { keyPath: 'id' });
+                        }
+                    };
+                    request.onsuccess = async (e) => {
+                        const db = e.target.result;
+                        await dbHelper.seedData(db);
+                        resolve(db);
+                    };
+                    request.onerror = (e) => reject(e.target.error);
+                });
+            },
+            seedData: async (db) => {
+                const tx = db.transaction('users', 'readwrite');
+                const store = tx.objectStore('users');
+                const adminReq = store.get('admin');
+                adminReq.onsuccess = () => {
+                    if (!adminReq.result) {
+                        store.put({ id: 'admin', username: 'admin', password: btoa('12345'), role: 'admin', name: 'Administrator' });
+                        store.put({ id: 'siswa1', username: 'siswa1', password: btoa('123'), role: 'student', name: 'Ahmad Siswa', nisn: '1001', kelas: 'VII A' });
+                    }
+                };
+                
+                const txPkg = db.transaction('packages', 'readwrite');
+                const pkgStore = txPkg.objectStore('packages');
+                const defaultPkgs = [
+                    { id: 'MAT-1', subject: 'Matematika', name: 'Paket 1', duration: 90, active: true },
+                    { id: 'MAT-2', subject: 'Matematika', name: 'Paket 2', duration: 90, active: true },
+                    { id: 'MAT-3', subject: 'Matematika', name: 'Paket 3', duration: 90, active: true },
+                    { id: 'BIN-1', subject: 'Bahasa Indonesia', name: 'Paket 1', duration: 90, active: true },
+                    { id: 'BIN-2', subject: 'Bahasa Indonesia', name: 'Paket 2', duration: 90, active: true },
+                    { id: 'BIN-3', subject: 'Bahasa Indonesia', name: 'Paket 3', duration: 90, active: true }
+                ];
+                defaultPkgs.forEach(p => {
+                    pkgStore.get(p.id).onsuccess = (e) => {
+                        if (!e.target.result) pkgStore.put(p);
+                    };
+                });
+            },
+            get: (storeName, id) => {
+                return new Promise(async (resolve) => {
+                    const db = await dbHelper.init();
+                    const tx = db.transaction(storeName, 'readonly');
+                    const req = tx.objectStore(storeName).get(id);
+                    req.onsuccess = () => resolve(req.result);
+                });
+            },
+            getAll: (storeName) => {
+                return new Promise(async (resolve) => {
+                    const db = await dbHelper.init();
+                    const tx = db.transaction(storeName, 'readonly');
+                    const req = tx.objectStore(storeName).getAll();
+                    req.onsuccess = () => resolve(req.result);
+                });
+            },
+            put: (storeName, data) => {
+                return new Promise(async (resolve) => {
+                    const db = await dbHelper.init();
+                    const tx = db.transaction(storeName, 'readwrite');
+                    const req = tx.objectStore(storeName).put(data);
+                    req.onsuccess = () => resolve(true);
+                });
+            },
+            delete: (storeName, id) => {
+                return new Promise(async (resolve) => {
+                    const db = await dbHelper.init();
+                    const tx = db.transaction(storeName, 'readwrite');
+                    tx.objectStore(storeName).delete(id);
+                    tx.oncomplete = () => resolve(true);
+                });
+            }
+        };
+
+        // ==========================================
+        // 2. UI COMPONENTS & ICONS
+        // ==========================================
+        const Icons = {
+            School: () => <svg className="w-10 h-10 text-blue-900" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l9-5-9-5-9 5 9 5z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 14v7"/></svg>,
+            User: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>,
+            Lock: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>,
+            Check: () => <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"/></svg>,
+            Clock: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
+            LogOut: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>,
+            Menu: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"/></svg>,
+            Upload: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>,
+        };
+
+        const Modal = ({ isOpen, title, children, onClose }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="bg-blue-900 px-6 py-4 flex justify-between items-center text-white">
+                            <h3 className="font-bold">{title}</h3>
+                            <button onClick={onClose} className="text-gray-300 hover:text-white">&times;</button>
+                        </div>
+                        <div className="p-6">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // 3. MAIN APPLICATION & ROUTING
+        // ==========================================
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [view, setView] = useState('login');
+            const [examSession, setExamSession] = useState(null);
+
+            useEffect(() => {
+                const checkSession = async () => {
+                    const savedUser = localStorage.getItem('tka_user');
+                    if (savedUser) {
+                        const parsed = JSON.parse(savedUser);
+                        setUser(parsed);
+                        if (parsed.role === 'student') {
+                            const sessions = await dbHelper.getAll('sessions');
+                            const ongoing = sessions.find(s => s.userId === parsed.id && s.status === 'ongoing');
+                            if (ongoing) {
+                                setExamSession(ongoing);
+                                setView('exam');
+                            } else {
+                                setView('student');
+                            }
+                        } else {
+                            setView('admin');
+                        }
+                    }
+                };
+                checkSession();
+            }, []);
+
+            const handleLogin = (userData) => {
+                setUser(userData);
+                localStorage.setItem('tka_user', JSON.stringify(userData));
+                setView(userData.role === 'admin' ? 'admin' : 'student');
+            };
+
+            const handleLogout = () => {
+                setUser(null);
+                setExamSession(null);
+                localStorage.removeItem('tka_user');
+                setView('login');
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {view === 'login' && <LoginView onLogin={handleLogin} />}
+                    {view === 'admin' && <AdminView user={user} onLogout={handleLogout} />}
+                    {view === 'student' && <StudentView user={user} onLogout={handleLogout} onStartExam={(session) => { setExamSession(session); setView('exam'); }} />}
+                    {view === 'exam' && <ExamView user={user} session={examSession} onFinish={(resultId) => setView('result')} />}
+                    {view === 'result' && <ResultView user={user} onBack={() => setView('student')} />}
+                </div>
+            );
+        };
+
+        // ==========================================
+        // 4. LOGIN VIEW
+        // ==========================================
+        const LoginView = ({ onLogin }) => {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                const users = await dbHelper.getAll('users');
+                const user = users.find(u => u.username === username && u.password === btoa(password));
+                
+                if (user) {
+                    onLogin(user);
+                } else {
+                    setError('Username atau password salah.');
+                }
+            };
+
+            return (
+                <div className="flex-1 flex items-center justify-center bg-gray-100 p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+                        <div className="bg-blue-900 p-8 text-center text-white">
+                            <div className="flex justify-center mb-4">
+                                <div className="w-20 h-20 rounded-full bg-blue-800 flex items-center justify-center mx-auto shadow-inner">
+                                    <Icons.School />
+                                </div>
+                            </div>
+                            <h1 className="text-2xl font-bold tracking-wider">TKA SMP</h1>
+                            <p className="text-blue-200 text-sm mt-1">TES KEMAMPUAN AKADEMIK</p>
+                            <p className="font-semibold mt-2">SMP NEGERI 5 SAJIRA</p>
+                        </div>
+                        
+                        <div className="p-8">
+                            {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 text-sm">{error}</div>}
+                            <form onSubmit={handleSubmit} className="space-y-5">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><Icons.User /></div>
+                                        <input type="text" required value={username} onChange={e => setUsername(e.target.value)} className="pl-10 w-full rounded-lg border-gray-300 border px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" placeholder="Masukkan Username" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400"><Icons.Lock /></div>
+                                        <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="pl-10 w-full rounded-lg border-gray-300 border px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" placeholder="Masukkan Password" />
+                                    </div>
+                                </div>
+                                <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow transition duration-200">
+                                    MASUK SEKARANG
+                                </button>
+                            </form>
+                            <div className="mt-6 text-center">
+                                <span className="inline-flex items-center text-xs font-medium text-green-600 bg-green-100 px-2.5 py-0.5 rounded-full">
+                                    <span className="w-2 h-2 mr-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                                    Server Lokal Terhubung
+                                </span>
+                            </div>
+                        </div>
+                        <div className="bg-gray-50 py-3 text-center text-xs text-gray-500 border-t">
+                            &copy; {new Date().getFullYear()} SMP Negeri 5 Sajira. All rights reserved.
+                            <span className="block mt-1">Dikembangkan oleh: Ernis Novitasari, S.Pd</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // 5. STUDENT VIEW (Dashboard)
+        // ==========================================
+        const StudentView = ({ user, onLogout, onStartExam }) => {
+            const [packages, setPackages] = useState([]);
+            const [selectedSubject, setSelectedSubject] = useState(null);
+            
+            useEffect(() => {
+                const loadData = async () => {
+                    const pkgs = await dbHelper.getAll('packages');
+                    setPackages(pkgs.filter(p => p.active));
+                };
+                loadData();
+            }, []);
+
+            const subjects = [...new Set(packages.map(p => p.subject))];
+
+            const startExam = async (pkg) => {
+                const results = await dbHelper.getAll('results');
+                if (results.find(r => r.userId === user.id && r.packageId === pkg.id)) {
+                    alert("Anda sudah mengerjakan paket ini.");
+                    return;
+                }
+
+                const questions = (await dbHelper.getAll('questions')).filter(q => q.packageId === pkg.id);
+                if (questions.length === 0) {
+                    alert("Paket soal masih kosong.");
+                    return;
+                }
+
+                const session = {
+                    id: 'sess_' + Date.now(),
+                    userId: user.id,
+                    packageId: pkg.id,
+                    startTime: Date.now(),
+                    duration: pkg.duration * 60,
+                    answers: {},
+                    ragu: {},
+                    status: 'ongoing'
+                };
+                await dbHelper.put('sessions', session);
+                onStartExam(session);
+            };
+
+            return (
+                <div className="flex-1 bg-gray-50 flex flex-col">
+                    <header className="bg-blue-900 text-white shadow-md p-4 flex justify-between items-center">
+                        <div className="flex items-center space-x-3">
+                            <Icons.School />
+                            <div>
+                                <h1 className="font-bold text-lg hidden sm:block">TKA SMP NEGERI 5 SAJIRA</h1>
+                                <h1 className="font-bold text-lg sm:hidden">TKA SMP</h1>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                            <div className="text-right hidden sm:block">
+                                <div className="text-sm font-semibold">{user.name}</div>
+                                <div className="text-xs text-blue-200">{user.kelas} | {user.nisn}</div>
+                            </div>
+                            <button onClick={onLogout} className="bg-red-500 hover:bg-red-600 p-2 rounded-full transition" title="Keluar">
+                                <Icons.LogOut />
+                            </button>
+                        </div>
+                    </header>
+
+                    <main className="flex-1 p-4 sm:p-8 max-w-5xl mx-auto w-full">
+                        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+                            <h2 className="text-xl font-bold text-gray-800 mb-2">Selamat Datang, {user.name}</h2>
+                            <p className="text-gray-600 text-sm">Pilih mata pelajaran dan paket soal untuk memulai Tes Kemampuan Akademik.</p>
+                        </div>
+
+                        {!selectedSubject ? (
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-700 mb-4">Pilih Mata Pelajaran</h3>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {subjects.map(subj => (
+                                        <div key={subj} onClick={() => setSelectedSubject(subj)} className="bg-white border-2 border-blue-100 rounded-xl p-6 cursor-pointer hover:border-blue-500 hover:shadow-md transition group">
+                                            <h4 className="text-xl font-bold text-blue-900 group-hover:text-blue-600">{subj}</h4>
+                                            <p className="text-sm text-gray-500 mt-2">{packages.filter(p => p.subject === subj).length} Paket Tersedia</p>
+                                        </div>
+                                    ))}
+                                    {subjects.length === 0 && <p className="text-gray-500 italic">Belum ada ujian yang aktif.</p>}
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <div className="flex items-center mb-4 space-x-2">
+                                    <button onClick={() => setSelectedSubject(null)} className="text-blue-600 hover:underline text-sm font-medium">&larr; Kembali</button>
+                                    <span className="text-gray-400">/</span>
+                                    <h3 className="text-lg font-semibold text-gray-700">{selectedSubject}</h3>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {packages.filter(p => p.subject === selectedSubject).map(pkg => (
+                                        <div key={pkg.id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm flex flex-col h-full">
+                                            <div className="flex-1">
+                                                <h4 className="text-lg font-bold text-gray-800">{pkg.name}</h4>
+                                                <div className="mt-3 space-y-2 text-sm text-gray-600">
+                                                    <div className="flex items-center"><Icons.Clock /><span className="ml-2">{pkg.duration} Menit</span></div>
+                                                </div>
+                                            </div>
+                                            <button onClick={() => startExam(pkg)} className="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition">
+                                                Mulai Ujian
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // 6. EXAM ENGINE (Core CBT Engine)
+        // ==========================================
+        const ExamView = ({ user, session, onFinish }) => {
+            const [questions, setQuestions] = useState([]);
+            const [currIndex, setCurrIndex] = useState(0);
+            const [answers, setAnswers] = useState(session.answers || {});
+            const [ragu, setRagu] = useState(session.ragu || {});
+            const [timeLeft, setTimeLeft] = useState(0);
+            const [showConfirm, setShowConfirm] = useState(false);
+            const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+            useEffect(() => {
+                const loadQ = async () => {
+                    let qs = await dbHelper.getAll('questions');
+                    qs = qs.filter(q => q.packageId === session.packageId);
+                    setQuestions(qs);
+                };
+                loadQ();
+                
+                // Calculate time left based on absolute start time
+                const now = Math.floor(Date.now() / 1000);
+                const start = Math.floor(session.startTime / 1000);
+                const elapsed = now - start;
+                const remaining = Math.max(0, session.duration - elapsed);
+                setTimeLeft(remaining);
+            }, [session]);
+
+            useEffect(() => {
+                if (timeLeft <= 0 && questions.length > 0) {
+                    submitExam();
+                    return;
+                }
+                const timer = setInterval(() => setTimeLeft(t => Math.max(0, t - 1)), 1000);
+                return () => clearInterval(timer);
+            }, [timeLeft, questions.length]);
+
+            // Auto-save logic
+            useEffect(() => {
+                const save = async () => {
+                    const updatedSession = { ...session, answers, ragu };
+                    await dbHelper.put('sessions', updatedSession);
+                };
+                save();
+            }, [answers, ragu]);
+
+            const formatTime = (seconds) => {
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = seconds % 60;
+                return `${h > 0 ? h+':' : ''}${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            };
+
+            const handleAnswer = (qId, answerData) => {
+                setAnswers(prev => ({ ...prev, [qId]: answerData }));
+            };
+
+            const toggleRagu = (qId) => {
+                setRagu(prev => ({ ...prev, [qId]: !prev[qId] }));
+            };
+
+            const gradeExam = (qs, ans) => {
+                let totalScore = 0;
+                let maxScore = 0;
+                
+                qs.forEach(q => {
+                    const bobot = parseInt(q.bobot) || 10;
+                    maxScore += bobot;
+                    const userAnswer = ans[q.id];
+                    if (!userAnswer) return;
+
+                    if (q.type === 'PG') {
+                        if (userAnswer === q.answer) totalScore += bobot;
+                    } 
+                    else if (q.type === 'PGK') {
+                        // All or nothing implementation for simplicity in this demo
+                        const correctAnswers = q.answer || []; // Array
+                        const userAnswers = userAnswer || []; // Array
+                        if (correctAnswers.length === userAnswers.length && correctAnswers.every(v => userAnswers.includes(v))) {
+                            totalScore += bobot;
+                        }
+                    }
+                    else if (q.type === 'BS') {
+                        // Partial scoring based on statements
+                        const correctObj = q.answer || {}; // { stmt1: 'B', stmt2: 'S' }
+                        const userObj = userAnswer || {};
+                        const stmts = Object.keys(correctObj);
+                        if (stmts.length > 0) {
+                            let correctCount = 0;
+                            stmts.forEach(s => { if (userObj[s] === correctObj[s]) correctCount++; });
+                            totalScore += (correctCount / stmts.length) * bobot;
+                        }
+                    }
+                    else if (q.type === 'JODOH') {
+                        // Partial scoring
+                        const correctObj = q.answer || {};
+                        const userObj = userAnswer || {};
+                        const leftItems = Object.keys(correctObj);
+                        if (leftItems.length > 0) {
+                            let correctCount = 0;
+                            leftItems.forEach(l => { if (userObj[l] === correctObj[l]) correctCount++; });
+                            totalScore += (correctCount / leftItems.length) * bobot;
+                        }
+                    }
+                    else if (q.type === 'ISIAN') {
+                        // Case insensitive match against any variation
+                        const correctVars = (q.answer || []).map(a => a.toLowerCase().trim());
+                        const userVal = (userAnswer || '').toLowerCase().trim();
+                        if (correctVars.includes(userVal)) {
+                            totalScore += bobot;
+                        }
+                    }
+                });
+
+                return maxScore === 0 ? 0 : Math.round((totalScore / maxScore) * 100);
+            };
+
+            const submitExam = async () => {
+                const finalScore = gradeExam(questions, answers);
+                const result = {
+                    id: 'res_' + Date.now(),
+                    userId: user.id,
+                    userName: user.name,
+                    nisn: user.nisn,
+                    kelas: user.kelas,
+                    packageId: session.packageId,
+                    startTime: session.startTime,
+                    endTime: Date.now(),
+                    durationSecs: session.duration - timeLeft,
+                    answers: answers,
+                    score: finalScore,
+                    date: new Date().toISOString()
+                };
+                await dbHelper.put('results', result);
+                await dbHelper.delete('sessions', session.id);
+                onFinish(result.id);
+            };
+
+            if (questions.length === 0) return <div className="p-8 text-center">Memuat soal...</div>;
+
+            const q = questions[currIndex];
+            const answeredCount = Object.keys(answers).filter(k => {
+                const a = answers[k];
+                if (Array.isArray(a)) return a.length > 0;
+                if (typeof a === 'object') return Object.keys(a).length > 0;
+                return a !== undefined && a !== null && a !== '';
+            }).length;
+
+            return (
+                <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
+                    {/* Topbar */}
+                    <div className="bg-blue-900 text-white h-16 flex items-center justify-between px-4 sm:px-6 shrink-0 shadow-md z-10">
+                        <div className="flex items-center space-x-3">
+                            <Icons.School />
+                            <div className="hidden sm:block font-bold">TKA - {user.name}</div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                            <div className={`px-4 py-1.5 rounded-full font-mono text-lg font-bold shadow-inner ${timeLeft < 300 ? 'bg-red-600 animate-pulse' : 'bg-blue-800'}`}>
+                                {formatTime(timeLeft)}
+                            </div>
+                            <button className="sm:hidden p-2" onClick={() => setIsMenuOpen(!isMenuOpen)}><Icons.Menu /></button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex overflow-hidden relative">
+                        {/* Main Question Area */}
+                        <div className="flex-1 flex flex-col p-4 sm:p-6 overflow-y-auto">
+                            <div className="bg-white rounded-xl shadow p-6 mb-20">
+                                <div className="flex justify-between items-center mb-6 border-b pb-4">
+                                    <h2 className="text-xl font-bold text-gray-800">Soal No. {currIndex + 1}</h2>
+                                    <span className="text-sm font-semibold bg-gray-100 text-gray-600 px-3 py-1 rounded">Bobot: {q.bobot || 10}</span>
+                                </div>
+                                
+                                <div className="prose max-w-none text-lg text-gray-800 mb-8" dangerouslySetInnerHTML={{__html: q.text}} />
+                                
+                                {/* Question Types Rendering */}
+                                <div className="space-y-4">
+                                    {q.type === 'PG' && (q.options || []).map((opt, i) => {
+                                        const isChecked = answers[q.id] === opt;
+                                        return (
+                                            <label key={i} className="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition relative">
+                                                <input type="radio" name={`q_${q.id}`} className="exam-radio opacity-0 absolute w-0 h-0" checked={isChecked} onChange={() => handleAnswer(q.id, opt)} />
+                                                <div className="w-6 h-6 border-2 rounded-full mr-4 flex-shrink-0 flex items-center justify-center">
+                                                    {isChecked && <div className="w-3 h-3 bg-blue-600 rounded-full" />}
+                                                </div>
+                                                <div className="flex-1 pt-0.5">{opt}</div>
+                                            </label>
+                                        );
+                                    })}
+
+                                    {q.type === 'PGK' && (q.options || []).map((opt, i) => {
+                                        const currentAns = answers[q.id] || [];
+                                        const isChecked = currentAns.includes(opt);
+                                        return (
+                                            <label key={i} className="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition relative">
+                                                <input type="checkbox" className="exam-radio opacity-0 absolute w-0 h-0" checked={isChecked} onChange={() => {
+                                                    let newAns = [...currentAns];
+                                                    if (isChecked) newAns = newAns.filter(a => a !== opt);
+                                                    else newAns.push(opt);
+                                                    handleAnswer(q.id, newAns);
+                                                }} />
+                                                <div className={`w-6 h-6 border-2 rounded mr-4 flex-shrink-0 flex items-center justify-center ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : ''}`}>
+                                                    {isChecked && <Icons.Check />}
+                                                </div>
+                                                <div className="flex-1 pt-0.5">{opt}</div>
+                                            </label>
+                                        );
+                                    })}
+
+                                    {q.type === 'BS' && (
+                                        <table className="w-full text-left border-collapse">
+                                            <thead><tr className="bg-gray-100"><th className="p-3 border">Pernyataan</th><th className="p-3 border text-center w-24">Benar</th><th className="p-3 border text-center w-24">Salah</th></tr></thead>
+                                            <tbody>
+                                                {(q.options || []).map((stmt, i) => {
+                                                    const currentObj = answers[q.id] || {};
+                                                    return (
+                                                        <tr key={i}>
+                                                            <td className="p-3 border">{stmt}</td>
+                                                            <td className="p-3 border text-center"><input type="radio" name={`bs_${q.id}_${i}`} className="w-5 h-5 cursor-pointer accent-blue-600" checked={currentObj[stmt] === 'B'} onChange={() => handleAnswer(q.id, {...currentObj, [stmt]: 'B'})} /></td>
+                                                            <td className="p-3 border text-center"><input type="radio" name={`bs_${q.id}_${i}`} className="w-5 h-5 cursor-pointer accent-blue-600" checked={currentObj[stmt] === 'S'} onChange={() => handleAnswer(q.id, {...currentObj, [stmt]: 'S'})} /></td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    )}
+
+                                    {q.type === 'JODOH' && (
+                                        <div className="space-y-4">
+                                            {(q.options?.left || []).map((leftItem, i) => {
+                                                const currentObj = answers[q.id] || {};
+                                                return (
+                                                    <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-4 p-3 border rounded-lg bg-gray-50">
+                                                        <div className="flex-1 font-medium">{leftItem}</div>
+                                                        <select className="flex-1 p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" value={currentObj[leftItem] || ''} onChange={(e) => handleAnswer(q.id, {...currentObj, [leftItem]: e.target.value})}>
+                                                            <option value="" disabled>-- Pilih Pasangan --</option>
+                                                            {(q.options?.right || []).map((rightItem, j) => (
+                                                                <option key={j} value={rightItem}>{rightItem}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {q.type === 'ISIAN' && (
+                                        <div>
+                                            <input type="text" className="w-full p-4 border rounded-lg border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg" placeholder="Ketik jawaban Anda di sini..." value={answers[q.id] || ''} onChange={(e) => handleAnswer(q.id, e.target.value)} />
+                                            <p className="text-xs text-gray-500 mt-2">Jawab dengan singkat dan jelas.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Navigation Sidebar */}
+                        <div className={`${isMenuOpen ? 'translate-x-0' : 'translate-x-full'} sm:translate-x-0 fixed sm:static right-0 top-16 bottom-0 w-72 bg-white shadow-xl sm:shadow-none border-l transition-transform duration-300 z-20 flex flex-col`}>
+                            <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+                                <h3 className="font-bold text-gray-700">Navigasi Soal</h3>
+                                <button className="sm:hidden text-gray-500" onClick={() => setIsMenuOpen(false)}>&times;</button>
+                            </div>
+                            <div className="p-4 flex-1 overflow-y-auto">
+                                <div className="grid grid-cols-5 gap-2">
+                                    {questions.map((qs, i) => {
+                                        let statusClass = "bg-white border-gray-300 text-gray-700 hover:bg-gray-100"; // Default
+                                        const isAns = answers[qs.id] && (Array.isArray(answers[qs.id]) ? answers[qs.id].length > 0 : (typeof answers[qs.id] === 'object' ? Object.keys(answers[qs.id]).length > 0 : true));
+                                        
+                                        if (currIndex === i) statusClass = "bg-blue-100 border-blue-500 text-blue-800 ring-2 ring-blue-300"; // Active
+                                        else if (ragu[qs.id]) statusClass = "bg-orange-400 border-orange-500 text-white"; // Ragu
+                                        else if (isAns) statusClass = "bg-green-500 border-green-600 text-white"; // Answered
+
+                                        return (
+                                            <button key={qs.id} onClick={() => setCurrIndex(i)} className={`h-10 w-10 border rounded text-sm font-semibold flex items-center justify-center transition-colors ${statusClass}`}>
+                                                {i + 1}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                <div className="mt-8 space-y-2 text-xs text-gray-600">
+                                    <div className="flex items-center"><div className="w-3 h-3 bg-green-500 rounded mr-2"></div> Sudah Dijawab</div>
+                                    <div className="flex items-center"><div className="w-3 h-3 bg-orange-400 rounded mr-2"></div> Ragu-ragu</div>
+                                    <div className="flex items-center"><div className="w-3 h-3 bg-white border border-gray-300 rounded mr-2"></div> Belum Dijawab</div>
+                                </div>
+                            </div>
+                            <div className="p-4 border-t bg-gray-50">
+                                <button onClick={() => setShowConfirm(true)} className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-lg shadow transition">
+                                    SELESAI UJIAN
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Bottom Control Bar */}
+                    <div className="fixed bottom-0 left-0 right-0 sm:right-72 h-16 bg-white border-t flex justify-between items-center px-4 sm:px-6 z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+                        <button onClick={() => setCurrIndex(prev => Math.max(0, prev - 1))} disabled={currIndex === 0} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-100 disabled:opacity-50">
+                            &larr; Sebelumnya
+                        </button>
+                        <label className="flex items-center cursor-pointer select-none px-4 py-2 rounded-lg hover:bg-orange-50 text-orange-600 font-semibold transition">
+                            <input type="checkbox" className="mr-2 w-5 h-5 accent-orange-500" checked={!!ragu[q.id]} onChange={() => toggleRagu(q.id)} />
+                            RAGU-RAGU
+                        </label>
+                        <button onClick={() => setCurrIndex(prev => Math.min(questions.length - 1, prev + 1))} disabled={currIndex === questions.length - 1} className="px-4 py-2 bg-blue-600 rounded-lg text-white font-medium hover:bg-blue-700 disabled:opacity-50 transition">
+                            Selanjutnya &rarr;
+                        </button>
+                    </div>
+
+                    {/* Confirmation Modal */}
+                    <Modal isOpen={showConfirm} title="Konfirmasi Selesai" onClose={() => setShowConfirm(false)}>
+                        <div className="text-center">
+                            <h4 className="text-lg font-bold mb-2">Apakah Anda yakin ingin mengakhiri ujian?</h4>
+                            <p className="text-gray-600 mb-6">
+                                Anda telah menjawab <span className="font-bold text-green-600">{answeredCount}</span> dari <span className="font-bold">{questions.length}</span> soal.
+                                {answeredCount < questions.length && <span className="block mt-2 text-red-500">Ada {questions.length - answeredCount} soal yang belum dijawab!</span>}
+                            </p>
+                            <div className="flex gap-4">
+                                <button onClick={() => setShowConfirm(false)} className="flex-1 py-2 border rounded text-gray-700 font-semibold hover:bg-gray-50">Batal</button>
+                                <button onClick={submitExam} className="flex-1 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700">Ya, Selesai</button>
+                            </div>
+                        </div>
+                    </Modal>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // 7. RESULT VIEW (Student sees after exam)
+        // ==========================================
+        const ResultView = ({ user, onBack }) => {
+            const [result, setResult] = useState(null);
+
+            useEffect(() => {
+                const fetchRes = async () => {
+                    const results = await dbHelper.getAll('results');
+                    const myResults = results.filter(r => r.userId === user.id);
+                    if (myResults.length > 0) {
+                        setResult(myResults[myResults.length - 1]); // Get latest
+                    }
+                };
+                fetchRes();
+            }, [user]);
+
+            if (!result) return <div className="p-8 text-center">Memuat hasil...</div>;
+
+            return (
+                <div className="flex-1 flex flex-col items-center justify-center bg-gray-50 p-4">
+                    <div className="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md text-center border-t-8 border-green-500">
+                        <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Icons.Check />
+                        </div>
+                        <h1 className="text-2xl font-bold text-gray-800 mb-2">UJIAN TELAH SELESAI</h1>
+                        <p className="text-gray-500 mb-6">Terima kasih telah mengikuti TKA.</p>
+                        
+                        <div className="bg-gray-50 rounded-lg p-4 text-left space-y-3 mb-8">
+                            <div className="flex justify-between border-b pb-2"><span className="text-gray-500">Nama Peserta</span><span className="font-semibold">{result.userName}</span></div>
+                            <div className="flex justify-between border-b pb-2"><span className="text-gray-500">NISN</span><span className="font-semibold">{result.nisn}</span></div>
+                            <div className="flex justify-between border-b pb-2"><span className="text-gray-500">Nilai Akhir</span><span className="font-bold text-blue-600 text-lg">{result.score}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-500">Status</span><span className="font-semibold text-green-600">Berhasil Dikumpulkan</span></div>
+                        </div>
+
+                        <button onClick={onBack} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition">
+                            Kembali ke Dashboard
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+
+        // ==========================================
+        // 8. ADMIN DASHBOARD (Complete Management)
+        // ==========================================
+        const AdminView = ({ user, onLogout }) => {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            return (
+                <div className="flex h-screen bg-gray-100 overflow-hidden">
+                    <div className="w-64 bg-blue-900 text-white flex flex-col shadow-xl z-20 shrink-0">
+                        <div className="p-4 border-b border-blue-800 flex items-center space-x-3">
+                            <Icons.School />
+                            <div>
+                                <div className="font-bold">Admin TKA</div>
+                                <div className="text-xs text-blue-300">SMPN 5 Sajira</div>
+                            </div>
+                        </div>
+                        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+                            {['dashboard', 'peserta', 'bank_soal', 'hasil'].map(tab => (
+                                <button key={tab} onClick={() => setActiveTab(tab)} className={`w-full flex items-center p-3 rounded-lg text-sm font-medium capitalize ${activeTab === tab ? 'bg-blue-800 text-white shadow' : 'text-blue-200 hover:bg-blue-800 hover:text-white'}`}>
+                                    {tab.replace('_', ' ')}
+                                </button>
+                            ))}
+                        </nav>
+                        <div className="p-4 border-t border-blue-800">
+                            <button onClick={onLogout} className="w-full flex items-center justify-center p-2 rounded bg-red-600 hover:bg-red-700 text-sm font-semibold">
+                                <Icons.LogOut /><span className="ml-2">Logout</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                        <div className="p-6 sm:p-10">
+                            {activeTab === 'dashboard' && <AdminHome />}
+                            {activeTab === 'peserta' && <AdminPeserta />}
+                            {activeTab === 'bank_soal' && <AdminBankSoal />}
+                            {activeTab === 'hasil' && <AdminHasil />}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const AdminHome = () => {
+            const [stats, setStats] = useState({ users: 0, pkgs: 0, qs: 0, res: 0 });
+            useEffect(() => {
+                const load = async () => {
+                    const [u, p, q, r] = await Promise.all([dbHelper.getAll('users'), dbHelper.getAll('packages'), dbHelper.getAll('questions'), dbHelper.getAll('results')]);
+                    setStats({ users: u.filter(x=>x.role==='student').length, pkgs: p.length, qs: q.length, res: r.length });
+                };
+                load();
+            }, []);
+            return (
+                <div>
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6">Dashboard Administrator</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        {Object.entries({ 'Total Peserta': stats.users, 'Paket Soal': stats.pkgs, 'Total Soal': stats.qs, 'Sesi Selesai': stats.res }).map(([k, v], i) => (
+                            <div key={i} className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-500">
+                                <p className="text-sm text-gray-500 font-semibold mb-1">{k}</p>
+                                <p className="text-3xl font-bold text-gray-800">{v}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        const AdminPeserta = () => {
+            const [users, setUsers] = useState([]);
+            const [showModal, setShowModal] = useState(false);
+            const [showExcelModal, setShowExcelModal] = useState(false);
+            const [editingUser, setEditingUser] = useState(null);
+            const [name, setName] = useState('');
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [nisn, setNisn] = useState('');
+            const [kelas, setKelas] = useState('');
+
+            useEffect(() => { load() }, []);
+            const load = async () => setUsers((await dbHelper.getAll('users')).filter(u => u.role === 'student'));
+            
+            const openAddModal = () => {
+                setEditingUser(null);
+                setName(''); setUsername(''); setPassword('123'); setNisn(''); setKelas('VII A');
+                setShowModal(true);
+            };
+
+            const openEditModal = (u) => {
+                setEditingUser(u);
+                setName(u.name); setUsername(u.username); setPassword(''); setNisn(u.nisn); setKelas(u.kelas);
+                setShowModal(true);
+            };
+
+            const handleSaveUser = async (e) => {
+                e.preventDefault();
+                if (editingUser) {
+                    await dbHelper.put('users', { ...editingUser, name, username, nisn, kelas, ...(password ? { password: btoa(password) } : {}) });
+                } else {
+                    await dbHelper.put('users', { id: 'siswa_' + Date.now(), username, password: btoa(password || '123'), role: 'student', name, nisn, kelas });
+                }
+                setShowModal(false);
+                load();
+            };
+
+            const deleteUser = async (id) => {
+                if (confirm('Yakin ingin menghapus peserta ini?')) {
+                    await dbHelper.delete('users', id);
+                    load();
+                }
+            };
+
+            const handleExcelUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = async (evt) => {
+                    try {
+                        const data = XLSX.utils.sheet_to_json(XLSX.read(evt.target.result, { type: 'binary' }).Sheets[XLSX.read(evt.target.result, { type: 'binary' }).SheetNames[0]]);
+                        let count = 0;
+                        for (let row of data) {
+                            if (!row.Nama || !row.Username) continue;
+                            await dbHelper.put('users', {
+                                id: 'siswa_' + Date.now() + Math.random().toString(36).substr(2, 4),
+                                username: String(row.Username),
+                                password: btoa(String(row.Password || '123')),
+                                role: 'student',
+                                name: String(row.Nama),
+                                nisn: String(row.NISN || ''),
+                                kelas: String(row.Kelas || 'VII')
+                            });
+                            count++;
+                        }
+                        alert(`Berhasil mengimpor ${count} peserta.`);
+                        setShowExcelModal(false);
+                        load();
+                    } catch (err) {
+                        alert("Gagal membaca file Excel peserta.");
+                    }
+                };
+                reader.readAsBinaryString(file);
+            };
+
+            return (
+                <div className="bg-white rounded-xl shadow-sm border p-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h3 className="text-lg font-bold text-gray-800">Manajemen Peserta</h3>
+                        <div className="flex flex-wrap gap-2">
+                            <button onClick={() => setShowExcelModal(true)} className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700 flex items-center">
+                                <Icons.Upload /><span className="ml-2">Import Excel</span>
+                            </button>
+                            <button onClick={openAddModal} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+                                + Tambah Peserta
+                            </button>
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 border-b">
+                                <tr>
+                                    <th className="p-3">Nama Peserta</th>
+                                    <th className="p-3">Username</th>
+                                    <th className="p-3">NISN</th>
+                                    <th className="p-3">Kelas</th>
+                                    <th className="p-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {users.map(u => (
+                                    <tr key={u.id} className="border-b hover:bg-gray-50">
+                                        <td className="p-3 font-medium">{u.name}</td>
+                                        <td className="p-3 text-gray-500 font-mono">{u.username}</td>
+                                        <td className="p-3">{u.nisn}</td>
+                                        <td className="p-3">{u.kelas}</td>
+                                        <td className="p-3 text-center space-x-2">
+                                            <button onClick={() => openEditModal(u)} className="text-blue-600 hover:underline font-medium">Edit</button>
+                                            <button onClick={() => deleteUser(u.id)} className="text-red-600 hover:underline font-medium">Hapus</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {users.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-gray-500">Belum ada peserta.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <Modal isOpen={showModal} title={editingUser ? "Edit Peserta" : "Tambah Peserta"} onClose={() => setShowModal(false)}>
+                        <form onSubmit={handleSaveUser} className="space-y-4">
+                            <div><label className="block text-sm font-medium mb-1">Nama Lengkap</label><input type="text" required className="w-full border p-2 rounded" value={name} onChange={e => setName(e.target.value)} /></div>
+                            <div><label className="block text-sm font-medium mb-1">Username</label><input type="text" required className="w-full border p-2 rounded" value={username} onChange={e => setUsername(e.target.value)} /></div>
+                            <div><label className="block text-sm font-medium mb-1">Password</label><input type="password" className="w-full border p-2 rounded" value={password} onChange={e => setPassword(e.target.value)} placeholder="Kosongkan jika tetap" /></div>
+                            <div><label className="block text-sm font-medium mb-1">NISN</label><input type="text" className="w-full border p-2 rounded" value={nisn} onChange={e => setNisn(e.target.value)} /></div>
+                            <div><label className="block text-sm font-medium mb-1">Kelas</label><input type="text" className="w-full border p-2 rounded" value={kelas} onChange={e => setKelas(e.target.value)} /></div>
+                            <div className="pt-4 flex gap-2">
+                                <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2 border rounded">Batal</button>
+                                <button type="submit" className="flex-1 py-2 bg-blue-600 text-white rounded font-medium">Simpan</button>
+                            </div>
+                        </form>
+                    </Modal>
+
+                    <Modal isOpen={showExcelModal} title="Import Peserta Excel" onClose={() => setShowExcelModal(false)}>
+                        <div className="space-y-4">
+                            <div><label className="block text-sm font-medium mb-1">Pilih File Excel</label><input type="file" accept=".xlsx, .xls" onChange={handleExcelUpload} className="w-full border p-2 rounded" /></div>
+                        </div>
+                    </Modal>
+                </div>
+            );
+        };
+
+        const AdminBankSoal = () => {
+            const [packages, setPackages] = useState([]);
+            const [questions, setQuestions] = useState([]);
+            const [selectedPkgFilter, setSelectedPkgFilter] = useState('');
+            const [showUploadModal, setShowUploadModal] = useState(false);
+            const [showQuestionModal, setShowQuestionModal] = useState(false);
+            const [editingQuestion, setEditingQuestion] = useState(null);
+            const [uploadTarget, setUploadTarget] = useState('');
+
+            const [qPackageId, setQPackageId] = useState('');
+            const [qType, setQType] = useState('PG');
+            const [qText, setQText] = useState('');
+            const [qBobot, setQBobot] = useState(10);
+            const [qImage, setQImage] = useState('');
+            const [qOptions, setQOptions] = useState(['', '', '', '']);
+            const [qAnswer, setQAnswer] = useState('');
+            const [qIsianAnswers, setQIsianAnswers] = useState(['']);
+            const [qPgkAnswers, setQPgkAnswers] = useState([]);
+            const [qBsStatements, setQBsStatements] = useState([{ stmt: '', val: 'B' }]);
+            const [qJodohPairs, setQJodohPairs] = useState([{ left: '', right: '' }]);
+
+            useEffect(() => { load() }, []);
+            const load = async () => {
+                setPackages(await dbHelper.getAll('packages'));
+                setQuestions(await dbHelper.getAll('questions'));
+            };
+
+            const openAddQuestion = () => {
+                setEditingQuestion(null);
+                setQPackageId(packages[0]?.id || '');
+                setQType('PG');
+                setQText('');
+                setQBobot(10);
+                setQImage('');
+                setQOptions(['', '', '', '']);
+                setQAnswer('');
+                setQIsianAnswers(['']);
+                setQPgkAnswers([]);
+                setShowQuestionModal(true);
+            };
+
+            const openEditQuestion = (q) => {
+                setEditingQuestion(q);
+                setQPackageId(q.packageId);
+                setQType(q.type);
+                setQText(q.text);
+                setQBobot(q.bobot || 10);
+                setQImage(q.image || '');
+                if (q.type === 'PG') {
+                    setQOptions(q.options || ['', '', '', '']);
+                    setQAnswer(q.answer || '');
+                } else if (q.type === 'PGK') {
+                    setQOptions(q.options || ['', '', '', '']);
+                    setQPgkAnswers(Array.isArray(q.answer) ? q.answer : []);
+                } else if (q.type === 'ISIAN') {
+                    const ansArr = Array.isArray(q.answer) ? q.answer : [q.answer || ''];
+                    setQIsianAnswers(ansArr.length > 0 ? ansArr : ['']);
+                }
+                setShowQuestionModal(true);
+            };
+
+            const handleSaveQuestion = async (e) => {
+                e.preventDefault();
+                let finalOptions = qOptions;
+                let finalAnswer = qAnswer;
+
+                if (qType === 'PGK') finalAnswer = qPgkAnswers;
+                else if (qType === 'ISIAN') finalAnswer = qIsianAnswers.filter(a => a.trim() !== '');
+
+                const questionData = {
+                    id: editingQuestion ? editingQuestion.id : 'q_' + Date.now(),
+                    packageId: qPackageId,
+                    type: qType,
+                    text: qText,
+                    bobot: parseInt(qBobot) || 10,
+                    image: qImage,
+                    options: finalOptions,
+                    answer: finalAnswer
+                };
+
+                await dbHelper.put('questions', questionData);
+                setShowQuestionModal(false);
+                load();
+            };
+
+            const deleteQuestion = async (id) => {
+                if (confirm('Yakin ingin menghapus soal ini?')) {
+                    await dbHelper.delete('questions', id);
+                    load();
+                }
+            };
+
+            const togglePackage = async (pkg) => {
+                await dbHelper.put('packages', { ...pkg, active: !pkg.active });
+                load();
+            };
+
+            const filteredQuestions = selectedPkgFilter ? questions.filter(q => q.packageId === selectedPkgFilter) : questions;
+
+            return (
+                <div className="space-y-6">
+                    <div className="bg-white rounded-xl shadow-sm border p-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-lg font-bold text-gray-800">Paket Soal</h3>
+                            <div className="flex gap-2">
+                                <button onClick={() => setShowUploadModal(true)} className="flex items-center bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700">
+                                    <Icons.Upload /><span className="ml-2">Import Excel</span>
+                                </button>
+                                <button onClick={openAddQuestion} className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700">
+                                    + Tambah Soal Manual
+                                </button>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {packages.map(pkg => {
+                                const qCount = questions.filter(q => q.packageId === pkg.id).length;
+                                return (
+                                    <div key={pkg.id} className="border p-4 rounded-lg flex flex-col">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <h4 className="font-bold text-gray-800">{pkg.name} - {pkg.subject}</h4>
+                                                <p className="text-sm text-gray-500">{qCount} Soal | {pkg.duration} Menit</p>
+                                            </div>
+                                            <span className={`px-2 py-1 text-xs font-semibold rounded ${pkg.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                {pkg.active ? 'Aktif' : 'Nonaktif'}
+                                            </span>
+                                        </div>
+                                        <div className="mt-4 pt-4 border-t flex gap-2">
+                                            <button onClick={() => togglePackage(pkg)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-1.5 rounded text-sm">
+                                                Ubah Status
+                                            </button>
+                                            <button onClick={() => setSelectedPkgFilter(selectedPkgFilter === pkg.id ? '' : pkg.id)} className={`flex-1 font-medium py-1.5 rounded text-sm ${selectedPkgFilter === pkg.id ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'}`}>
+                                                {selectedPkgFilter === pkg.id ? 'Semua' : 'Lihat'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">Daftar Soal</h3>
+                        <div className="space-y-4">
+                            {filteredQuestions.map((q, idx) => {
+                                const pkg = packages.find(p => p.id === q.packageId);
+                                return (
+                                    <div key={q.id} className="border p-4 rounded-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                        <div className="flex-1">
+                                            <div className="flex items-center space-x-2 mb-1">
+                                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 font-bold rounded">{q.type}</span>
+                                                <span className="text-xs text-gray-500 font-medium">{pkg ? `${pkg.subject} - ${pkg.name}` : ''}</span>
+                                            </div>
+                                            <p className="text-gray-800 font-medium">{idx + 1}. {q.text}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => openEditQuestion(q)} className="px-3 py-1.5 bg-blue-50 text-blue-600 rounded text-sm font-medium">Edit</button>
+                                            <button onClick={() => deleteQuestion(q.id)} className="px-3 py-1.5 bg-red-50 text-red-600 rounded text-sm font-medium">Hapus</button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                            {filteredQuestions.length === 0 && <p className="text-center text-gray-500 py-4">Belum ada soal tersedia.</p>}
+                        </div>
+                    </div>
+
+                    <Modal isOpen={showQuestionModal} title={editingQuestion ? "Edit Soal" : "Tambah Soal"} onClose={() => setShowQuestionModal(false)}>
+                        <form onSubmit={handleSaveQuestion} className="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Paket Soal</label>
+                                <select required className="w-full border p-2 rounded" value={qPackageId} onChange={e => setQPackageId(e.target.value)}>
+                                    {packages.map(p => <option key={p.id} value={p.id}>{p.subject} - {p.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Jenis Soal</label>
+                                <select className="w-full border p-2 rounded" value={qType} onChange={e => setQType(e.target.value)}>
+                                    <option value="PG">Pilihan Ganda</option>
+                                    <option value="PGK">Pilihan Ganda Kompleks</option>
+                                    <option value="ISIAN">Isian Singkat</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Pertanyaan</label>
+                                <textarea required rows="3" className="w-full border p-2 rounded" value={qText} onChange={e => setQText(e.target.value)} />
+                            </div>
+                            <div className="pt-4 flex gap-2 border-t">
+                                <button type="button" onClick={() => setShowQuestionModal(false)} className="flex-1 py-2 border rounded">Batal</button>
+                                <button type="submit" className="flex-1 py-2 bg-blue-600 text-white rounded font-medium">Simpan</button>
+                            </div>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        };
+
+        const AdminHasil = () => {
+            const [results, setResults] = useState([]);
+            const [packages, setPackages] = useState([]);
+            
+            useEffect(() => { load() }, []);
+            const load = async () => {
+                setResults(await dbHelper.getAll('results'));
+                setPackages(await dbHelper.getAll('packages'));
+            };
+
+            const exportExcel = () => {
+                const data = results.map(r => {
+                    const pkg = packages.find(p => p.id === r.packageId);
+                    return {
+                        'Nama Peserta': r.userName,
+                        'NISN': r.nisn,
+                        'Kelas': r.kelas,
+                        'Mata Pelajaran': pkg ? pkg.subject : '-',
+                        'Paket': pkg ? pkg.name : '-',
+                        'Nilai Akhir': r.score,
+                        'Waktu Selesai': new Date(r.endTime).toLocaleString()
+                    };
+                });
+                const ws = XLSX.utils.json_to_sheet(data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Rekap_Nilai");
+                XLSX.writeFile(wb, `Rekap_Nilai_TKA.xlsx`);
+            };
+
+            return (
+                <div className="bg-white rounded-xl shadow-sm border p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-gray-800">Rekapitulasi Hasil Ujian</h3>
+                        <button onClick={exportExcel} className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-green-700">
+                            Download Excel
+                        </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 border-b">
+                                <tr>
+                                    <th className="p-3">Nama Peserta</th>
+                                    <th className="p-3">Kelas</th>
+                                    <th className="p-3">Paket Ujian</th>
+                                    <th className="p-3">Nilai Akhir</th>
+                                    <th className="p-3">Waktu Selesai</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {results.map(r => {
+                                    const pkg = packages.find(p => p.id === r.packageId);
+                                    return (
+                                        <tr key={r.id} className="border-b hover:bg-gray-50">
+                                            <td className="p-3 font-medium">{r.userName}</td>
+                                            <td className="p-3">{r.kelas}</td>
+                                            <td className="p-3">{pkg ? `${pkg.subject} - ${pkg.name}` : r.packageId}</td>
+                                            <td className="p-3 font-bold text-blue-600">{r.score}</td>
+                                            <td className="p-3 text-gray-500">{new Date(r.endTime).toLocaleString()}</td>
+                                        </tr>
+                                    );
+                                })}
+                                {results.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-gray-500">Belum ada hasil ujian.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
