@@ -25,6 +25,7 @@
 <body>
     <div id="root"></div>
 
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js" data-presets="react"></script>
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo } = React;
 
@@ -139,18 +140,19 @@
             Menu: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"/></svg>,
             Upload: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>,
             Download: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>,
+            Image: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>,
         };
 
-        const Modal = ({ isOpen, title, children, onClose }) => {
+        const Modal = ({ isOpen, title, children, onClose, maxWidth = 'max-w-md' }) => {
             if (!isOpen) return null;
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
-                        <div className="bg-blue-900 px-6 py-4 flex justify-between items-center text-white">
+                    <div className={`bg-white rounded-xl shadow-xl w-full ${maxWidth} flex flex-col max-h-[95vh]`}>
+                        <div className="bg-blue-900 px-6 py-4 flex justify-between items-center text-white shrink-0 rounded-t-xl">
                             <h3 className="font-bold">{title}</h3>
-                            <button onClick={onClose} className="text-gray-300 hover:text-white">&times;</button>
+                            <button onClick={onClose} className="text-gray-300 hover:text-white text-2xl leading-none">&times;</button>
                         </div>
-                        <div className="p-6">
+                        <div className="p-6 overflow-y-auto">
                             {children}
                         </div>
                     </div>
@@ -580,10 +582,10 @@
                                         return (
                                             <label key={i} className="flex items-start p-4 border rounded-lg cursor-pointer hover:bg-gray-50 transition relative">
                                                 <input type="radio" name={`q_${q.id}`} className="exam-radio opacity-0 absolute w-0 h-0" checked={isChecked} onChange={() => handleAnswer(q.id, opt)} />
-                                                <div className="w-6 h-6 border-2 rounded-full mr-4 flex-shrink-0 flex items-center justify-center">
+                                                <div className="w-6 h-6 border-2 rounded-full mr-4 flex-shrink-0 flex items-center justify-center mt-0.5">
                                                     {isChecked && <div className="w-3 h-3 bg-blue-600 rounded-full" />}
                                                 </div>
-                                                <div className="flex-1 pt-0.5">{opt}</div>
+                                                <div className="flex-1 pt-0.5" dangerouslySetInnerHTML={{__html: opt}} />
                                             </label>
                                         );
                                     })}
@@ -599,10 +601,10 @@
                                                     else newAns.push(opt);
                                                     handleAnswer(q.id, newAns);
                                                 }} />
-                                                <div className={`w-6 h-6 border-2 rounded mr-4 flex-shrink-0 flex items-center justify-center ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : ''}`}>
+                                                <div className={`w-6 h-6 border-2 rounded mr-4 flex-shrink-0 flex items-center justify-center mt-0.5 ${isChecked ? 'bg-blue-600 border-blue-600 text-white' : ''}`}>
                                                     {isChecked && <Icons.Check />}
                                                 </div>
-                                                <div className="flex-1 pt-0.5">{opt}</div>
+                                                <div className="flex-1 pt-0.5" dangerouslySetInnerHTML={{__html: opt}} />
                                             </label>
                                         );
                                     })}
@@ -615,7 +617,7 @@
                                                     const currentObj = answers[q.id] || {};
                                                     return (
                                                         <tr key={i}>
-                                                            <td className="p-3 border">{stmt}</td>
+                                                            <td className="p-3 border" dangerouslySetInnerHTML={{__html: stmt}} />
                                                             <td className="p-3 border text-center"><input type="radio" name={`bs_${q.id}_${i}`} className="w-5 h-5 cursor-pointer accent-blue-600" checked={currentObj[stmt] === 'B'} onChange={() => handleAnswer(q.id, {...currentObj, [stmt]: 'B'})} /></td>
                                                             <td className="p-3 border text-center"><input type="radio" name={`bs_${q.id}_${i}`} className="w-5 h-5 cursor-pointer accent-blue-600" checked={currentObj[stmt] === 'S'} onChange={() => handleAnswer(q.id, {...currentObj, [stmt]: 'S'})} /></td>
                                                         </tr>
@@ -631,7 +633,7 @@
                                                 const currentObj = answers[q.id] || {};
                                                 return (
                                                     <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-4 p-3 border rounded-lg bg-gray-50">
-                                                        <div className="flex-1 font-medium">{leftItem}</div>
+                                                        <div className="flex-1 font-medium" dangerouslySetInnerHTML={{__html: leftItem}} />
                                                         <select className="flex-1 p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500" value={currentObj[leftItem] || ''} onChange={(e) => handleAnswer(q.id, {...currentObj, [leftItem]: e.target.value})}>
                                                             <option value="" disabled>-- Pilih Pasangan --</option>
                                                             {(q.options?.right || []).map((rightItem, j) => (
@@ -831,16 +833,25 @@
             );
         };
 
+        const processWorkbook = (data, isBinary = true) => {
+            const workbook = XLSX.read(data, { type: isBinary ? 'binary' : 'array' });
+            return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+        };
+
         const AdminPeserta = () => {
             const [users, setUsers] = useState([]);
             const [showModal, setShowModal] = useState(false);
             const [showExcelModal, setShowExcelModal] = useState(false);
             const [editingUser, setEditingUser] = useState(null);
+            const [userToDelete, setUserToDelete] = useState(null);
+            const [infoMessage, setInfoMessage] = useState('');
             const [name, setName] = useState('');
             const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
             const [nisn, setNisn] = useState('');
             const [kelas, setKelas] = useState('');
+            const [uploadTargetUrl, setUploadTargetUrl] = useState('');
+            const [isLoadingUrl, setIsLoadingUrl] = useState(false);
 
             useEffect(() => { load() }, []);
             const load = async () => setUsers((await dbHelper.getAll('users')).filter(u => u.role === 'student'));
@@ -868,11 +879,37 @@
                 load();
             };
 
-            const deleteUser = async (id) => {
-                if (confirm('Yakin ingin menghapus peserta ini?')) {
-                    await dbHelper.delete('users', id);
+            const confirmDeleteUser = (u) => {
+                setUserToDelete(u);
+            };
+
+            const executeDeleteUser = async () => {
+                if (userToDelete) {
+                    await dbHelper.delete('users', userToDelete.id);
+                    setUserToDelete(null);
                     load();
                 }
+            };
+
+            const processStudentData = async (data) => {
+                let count = 0;
+                for (let row of data) {
+                    if (!row.Nama || !row.Username) continue;
+                    await dbHelper.put('users', {
+                        id: 'siswa_' + Date.now() + Math.random().toString(36).substr(2, 4),
+                        username: String(row.Username),
+                        password: btoa(String(row.Password || '123')),
+                        role: 'student',
+                        name: String(row.Nama),
+                        nisn: String(row.NISN || ''),
+                        kelas: String(row.Kelas || 'VII')
+                    });
+                    count++;
+                }
+                setInfoMessage(`Berhasil mengimpor ${count} peserta.`);
+                setShowExcelModal(false);
+                setUploadTargetUrl('');
+                load();
             };
 
             const handleExcelUpload = async (e) => {
@@ -881,29 +918,45 @@
                 const reader = new FileReader();
                 reader.onload = async (evt) => {
                     try {
-                        const data = XLSX.utils.sheet_to_json(XLSX.read(evt.target.result, { type: 'binary' }).Sheets[XLSX.read(evt.target.result, { type: 'binary' }).SheetNames[0]]);
-                        let count = 0;
-                        for (let row of data) {
-                            if (!row.Nama || !row.Username) continue;
-                            await dbHelper.put('users', {
-                                id: 'siswa_' + Date.now() + Math.random().toString(36).substr(2, 4),
-                                username: String(row.Username),
-                                password: btoa(String(row.Password || '123')),
-                                role: 'student',
-                                name: String(row.Nama),
-                                nisn: String(row.NISN || ''),
-                                kelas: String(row.Kelas || 'VII')
-                            });
-                            count++;
-                        }
-                        alert(`Berhasil mengimpor ${count} peserta.`);
-                        setShowExcelModal(false);
-                        load();
+                        const data = processWorkbook(evt.target.result, true);
+                        await processStudentData(data);
                     } catch (err) {
-                        alert("Gagal membaca file Excel peserta.");
+                        console.error(err);
+                        setInfoMessage("Gagal membaca file Excel/CSV peserta.");
                     }
                 };
                 reader.readAsBinaryString(file);
+            };
+
+            const handleUrlImport = async () => {
+                if (!uploadTargetUrl) {
+                    setInfoMessage("Masukkan URL file terlebih dahulu.");
+                    return;
+                }
+                setIsLoadingUrl(true);
+                try {
+                    const response = await fetch(uploadTargetUrl);
+                    if (!response.ok) throw new Error("Network response was not ok");
+                    const arrayBuffer = await response.arrayBuffer();
+                    const data = processWorkbook(arrayBuffer, false);
+                    await processStudentData(data);
+                } catch (error) {
+                    console.error(error);
+                    setInfoMessage("Gagal menarik data dari URL. Pastikan link adalah file raw Excel/CSV dan mengizinkan akses CORS.");
+                } finally {
+                    setIsLoadingUrl(false);
+                }
+            };
+
+            const downloadTemplate = () => {
+                const templateData = [
+                    { Nama: 'Ahmad Siswa', Username: 'siswa1', Password: '123', NISN: '1001', Kelas: 'VII A' },
+                    { Nama: 'Budi Santoso', Username: 'siswa2', Password: '123', NISN: '1002', Kelas: 'VII B' }
+                ];
+                const ws = XLSX.utils.json_to_sheet(templateData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Template_Peserta");
+                XLSX.writeFile(wb, "Template_Import_Peserta.xlsx");
             };
 
             return (
@@ -939,7 +992,7 @@
                                         <td className="p-3">{u.kelas}</td>
                                         <td className="p-3 text-center space-x-2">
                                             <button onClick={() => openEditModal(u)} className="text-blue-600 hover:underline font-medium">Edit</button>
-                                            <button onClick={() => deleteUser(u.id)} className="text-red-600 hover:underline font-medium">Hapus</button>
+                                            <button onClick={() => confirmDeleteUser(u)} className="text-red-600 hover:underline font-medium">Hapus</button>
                                         </td>
                                     </tr>
                                 ))}
@@ -962,9 +1015,55 @@
                         </form>
                     </Modal>
 
-                    <Modal isOpen={showExcelModal} title="Import Peserta Excel" onClose={() => setShowExcelModal(false)}>
+                    <Modal isOpen={showExcelModal} title="Import Peserta Excel/CSV" onClose={() => setShowExcelModal(false)} maxWidth="max-w-lg">
                         <div className="space-y-4">
-                            <div><label className="block text-sm font-medium mb-1">Pilih File Excel</label><input type="file" accept=".xlsx, .xls" onChange={handleExcelUpload} className="w-full border p-2 rounded" /></div>
+                            <div className="bg-blue-50 text-blue-800 p-4 rounded-lg text-sm border border-blue-100 mb-2">
+                                <p className="font-bold mb-2">Format Header Kolom (Baris Pertama):</p>
+                                <ul className="list-disc pl-5 space-y-1 text-xs">
+                                    <li><b>Nama</b>: Nama Lengkap Peserta (Wajib)</li>
+                                    <li><b>Username</b>: Username untuk login (Wajib, harus unik)</li>
+                                    <li><b>Password</b>: Kata sandi (Kosongkan = '123')</li>
+                                    <li><b>NISN</b>: Nomor Induk Siswa Nasional (Opsional)</li>
+                                    <li><b>Kelas</b>: Kelas peserta (Opsional)</li>
+                                </ul>
+                            </div>
+                            
+                            <button onClick={downloadTemplate} className="w-full flex justify-center items-center bg-indigo-100 text-indigo-700 py-2.5 rounded-lg font-bold hover:bg-indigo-200 border border-indigo-200 transition shadow-sm mb-4">
+                                <Icons.Download /> <span className="ml-2">Unduh Template Data</span>
+                            </button>
+
+                            <div className="border-t pt-4">
+                                <label className="block text-sm font-medium mb-1 text-gray-700">Tarik dari Link URL (Raw Excel/CSV)</label>
+                                <div className="flex gap-2">
+                                    <input type="url" placeholder="https://..." value={uploadTargetUrl} onChange={(e) => setUploadTargetUrl(e.target.value)} className="flex-1 border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-50 text-sm" />
+                                    <button onClick={handleUrlImport} disabled={isLoadingUrl} className="bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+                                        {isLoadingUrl ? 'Menarik...' : 'Tarik Data'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="border-t pt-4">
+                                <label className="block text-sm font-medium mb-1 text-gray-700">Pilih File Komputer (.xlsx, .csv)</label>
+                                <input type="file" accept=".xlsx, .xls, .csv" onChange={handleExcelUpload} className="w-full border border-gray-300 p-2.5 rounded-lg bg-gray-50 text-sm" />
+                            </div>
+                        </div>
+                    </Modal>
+
+                    <Modal isOpen={!!userToDelete} title="Konfirmasi Hapus" onClose={() => setUserToDelete(null)}>
+                        <div className="text-center space-y-4">
+                            <p className="text-gray-700">Apakah Anda yakin ingin menghapus peserta <strong className="text-red-600">{userToDelete?.name}</strong>?</p>
+                            <p className="text-xs text-gray-500">Tindakan ini tidak dapat dibatalkan.</p>
+                            <div className="flex gap-4 pt-2">
+                                <button onClick={() => setUserToDelete(null)} className="flex-1 py-2 border rounded font-medium hover:bg-gray-50 transition">Batal</button>
+                                <button onClick={executeDeleteUser} className="flex-1 py-2 bg-red-600 text-white rounded font-medium hover:bg-red-700 transition">Ya, Hapus</button>
+                            </div>
+                        </div>
+                    </Modal>
+
+                    <Modal isOpen={!!infoMessage} title="Informasi" onClose={() => setInfoMessage('')}>
+                        <div className="text-center space-y-4">
+                            <p className="text-gray-700 font-medium">{infoMessage}</p>
+                            <button onClick={() => setInfoMessage('')} className="w-full py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition">Tutup</button>
                         </div>
                     </Modal>
                 </div>
@@ -978,7 +1077,9 @@
             const [showUploadModal, setShowUploadModal] = useState(false);
             const [showQuestionModal, setShowQuestionModal] = useState(false);
             const [editingQuestion, setEditingQuestion] = useState(null);
-            const [uploadTarget, setUploadTarget] = useState('');
+            
+            const [uploadTargetUrl, setUploadTargetUrl] = useState('');
+            const [isLoadingUrl, setIsLoadingUrl] = useState(false);
 
             const [qPackageId, setQPackageId] = useState('');
             const [qType, setQType] = useState('PG');
@@ -1114,78 +1215,101 @@
                 XLSX.writeFile(wb, "Template_Import_Soal_TKA.xlsx");
             };
 
+            const processQuestionData = async (data) => {
+                let count = 0;
+                for (let row of data) {
+                    // Validasi kolom wajib
+                    if (!row.PackageID || !row.Jenis || !row.Soal || row.Kunci === undefined) continue;
+                    
+                    let qType = String(row.Jenis).toUpperCase().trim();
+                    let finalOptions = [];
+                    let finalAnswer = '';
+                    
+                    if (qType === 'PG') {
+                        finalOptions = String(row.Opsi || '').split('|').map(s => s.trim());
+                        finalAnswer = String(row.Kunci).trim();
+                    } else if (qType === 'PGK') {
+                        finalOptions = String(row.Opsi || '').split('|').map(s => s.trim());
+                        finalAnswer = String(row.Kunci).split('|').map(s => s.trim());
+                    } else if (qType === 'ISIAN') {
+                        finalAnswer = String(row.Kunci).split('|').map(s => s.trim());
+                    } else if (qType === 'BS') {
+                        const stmts = String(row.Opsi || '').split('|').map(s => s.trim());
+                        const keys = String(row.Kunci).split('|').map(s => s.trim().toUpperCase());
+                        finalOptions = stmts;
+                        const ansObj = {};
+                        stmts.forEach((stmt, idx) => {
+                            ansObj[stmt] = keys[idx] || 'B';
+                        });
+                        finalAnswer = ansObj;
+                    } else if (qType === 'JODOH') {
+                        const lefts = String(row.Opsi || '').split('|').map(s => s.trim());
+                        const rights = String(row.Kunci).split('|').map(s => s.trim());
+                        finalOptions = {
+                            left: lefts,
+                            right: [...new Set(rights)].sort(() => Math.random() - 0.5)
+                        };
+                        const ansObj = {};
+                        lefts.forEach((left, idx) => {
+                            ansObj[left] = rights[idx] || '';
+                        });
+                        finalAnswer = ansObj;
+                    } else {
+                        continue; // Abaikan jika tipe tidak dikenali
+                    }
+
+                    await dbHelper.put('questions', {
+                        id: 'q_' + Date.now() + Math.random().toString(36).substr(2, 4),
+                        packageId: String(row.PackageID).trim(),
+                        type: qType,
+                        text: String(row.Soal),
+                        bobot: parseInt(row.Bobot) || 10,
+                        image: row.Image || '',
+                        options: finalOptions,
+                        answer: finalAnswer
+                    });
+                    count++;
+                }
+                alert(`Berhasil mengimpor ${count} soal.`);
+                setShowUploadModal(false);
+                setUploadTargetUrl('');
+                load();
+            };
+
             const handleExcelUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = async (evt) => {
                     try {
-                        const workbook = XLSX.read(evt.target.result, { type: 'binary' });
-                        const data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                        let count = 0;
-                        
-                        for (let row of data) {
-                            // Validasi kolom wajib
-                            if (!row.PackageID || !row.Jenis || !row.Soal || row.Kunci === undefined) continue;
-                            
-                            let qType = String(row.Jenis).toUpperCase().trim();
-                            let finalOptions = [];
-                            let finalAnswer = '';
-                            
-                            if (qType === 'PG') {
-                                finalOptions = String(row.Opsi || '').split('|').map(s => s.trim());
-                                finalAnswer = String(row.Kunci).trim();
-                            } else if (qType === 'PGK') {
-                                finalOptions = String(row.Opsi || '').split('|').map(s => s.trim());
-                                finalAnswer = String(row.Kunci).split('|').map(s => s.trim());
-                            } else if (qType === 'ISIAN') {
-                                finalAnswer = String(row.Kunci).split('|').map(s => s.trim());
-                            } else if (qType === 'BS') {
-                                const stmts = String(row.Opsi || '').split('|').map(s => s.trim());
-                                const keys = String(row.Kunci).split('|').map(s => s.trim().toUpperCase());
-                                finalOptions = stmts;
-                                const ansObj = {};
-                                stmts.forEach((stmt, idx) => {
-                                    ansObj[stmt] = keys[idx] || 'B';
-                                });
-                                finalAnswer = ansObj;
-                            } else if (qType === 'JODOH') {
-                                const lefts = String(row.Opsi || '').split('|').map(s => s.trim());
-                                const rights = String(row.Kunci).split('|').map(s => s.trim());
-                                finalOptions = {
-                                    left: lefts,
-                                    right: [...new Set(rights)].sort(() => Math.random() - 0.5)
-                                };
-                                const ansObj = {};
-                                lefts.forEach((left, idx) => {
-                                    ansObj[left] = rights[idx] || '';
-                                });
-                                finalAnswer = ansObj;
-                            } else {
-                                continue; // Abaikan jika tipe tidak dikenali
-                            }
-
-                            await dbHelper.put('questions', {
-                                id: 'q_' + Date.now() + Math.random().toString(36).substr(2, 4),
-                                packageId: String(row.PackageID).trim(),
-                                type: qType,
-                                text: String(row.Soal),
-                                bobot: parseInt(row.Bobot) || 10,
-                                image: row.Image || '',
-                                options: finalOptions,
-                                answer: finalAnswer
-                            });
-                            count++;
-                        }
-                        alert(`Berhasil mengimpor ${count} soal.`);
-                        setShowUploadModal(false);
-                        load();
+                        const data = processWorkbook(evt.target.result, true);
+                        await processQuestionData(data);
                     } catch (err) {
                         console.error(err);
-                        alert("Gagal membaca file Excel soal. Pastikan format kolom sesuai.");
+                        alert("Gagal membaca file Excel/CSV soal. Pastikan format kolom sesuai.");
                     }
                 };
                 reader.readAsBinaryString(file);
+            };
+
+            const handleUrlImport = async () => {
+                if (!uploadTargetUrl) {
+                    alert("Masukkan URL file terlebih dahulu.");
+                    return;
+                }
+                setIsLoadingUrl(true);
+                try {
+                    const response = await fetch(uploadTargetUrl);
+                    if (!response.ok) throw new Error("Network response was not ok");
+                    const arrayBuffer = await response.arrayBuffer();
+                    const data = processWorkbook(arrayBuffer, false);
+                    await processQuestionData(data);
+                } catch (error) {
+                    console.error(error);
+                    alert("Gagal menarik data dari URL. Pastikan link adalah file raw Excel/CSV dan mengizinkan akses CORS.");
+                } finally {
+                    setIsLoadingUrl(false);
+                }
             };
 
             const filteredQuestions = selectedPkgFilter ? questions.filter(q => q.packageId === selectedPkgFilter) : questions;
@@ -1257,8 +1381,8 @@
                         </div>
                     </div>
 
-                    <Modal isOpen={showQuestionModal} title={editingQuestion ? "Edit Soal" : "Tambah Soal"} onClose={() => setShowQuestionModal(false)}>
-                        <form onSubmit={handleSaveQuestion} className="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
+                    <Modal isOpen={showQuestionModal} title={editingQuestion ? "Edit Soal" : "Tambah Soal"} onClose={() => setShowQuestionModal(false)} maxWidth="max-w-3xl">
+                        <form onSubmit={handleSaveQuestion} className="space-y-4 pr-2">
                             <div>
                                 <label className="block text-sm font-medium mb-1">Paket Soal</label>
                                 <select required className="w-full border p-2 rounded" value={qPackageId} onChange={e => setQPackageId(e.target.value)}>
@@ -1308,14 +1432,31 @@
                                 <div className="space-y-2 border-t pt-2">
                                     <label className="block text-sm font-medium">Opsi Jawaban & Kunci (Pilih Kunci yang Benar)</label>
                                     {qOptions.map((opt, i) => (
-                                        <div key={i} className="flex gap-2 items-center">
-                                            <input type="radio" name="pg_key" checked={qAnswer === opt && opt !== ''} onChange={() => setQAnswer(opt)} className="w-4 h-4 accent-blue-600" />
-                                            <input type="text" required className="flex-1 border p-1.5 rounded text-sm" placeholder={`Opsi ${String.fromCharCode(65+i)}`} value={opt} onChange={e => {
+                                        <div key={i} className="flex gap-2 items-start">
+                                            <input type="radio" name="pg_key" checked={qAnswer === opt && opt !== ''} onChange={() => setQAnswer(opt)} className="w-4 h-4 accent-blue-600 mt-2" />
+                                            <textarea required className="flex-1 border p-1.5 rounded text-sm min-h-[40px]" placeholder={`Opsi ${String.fromCharCode(65+i)} (Dukung HTML/Teks/Rumus)`} value={opt} onChange={e => {
                                                 const newOpts = [...qOptions];
                                                 newOpts[i] = e.target.value;
                                                 setQOptions(newOpts);
                                                 if(qAnswer === opt) setQAnswer(e.target.value); 
                                             }} />
+                                            <label className="cursor-pointer text-blue-600 p-1.5 hover:bg-blue-50 rounded mt-1" title="Sisipkan Gambar">
+                                                <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if(file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (evt) => {
+                                                            const newOpts = [...qOptions];
+                                                            const imgHtml = `<img src="${evt.target.result}" style="max-height:100px; display:block; margin-top:5px;"/>`;
+                                                            newOpts[i] = newOpts[i] + imgHtml;
+                                                            setQOptions(newOpts);
+                                                            if(qAnswer === opt) setQAnswer(newOpts[i]);
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }} />
+                                                <Icons.Image />
+                                            </label>
                                         </div>
                                     ))}
                                 </div>
@@ -1325,12 +1466,12 @@
                                 <div className="space-y-2 border-t pt-2">
                                     <label className="block text-sm font-medium">Opsi Jawaban (Centang Kunci yang Benar)</label>
                                     {qOptions.map((opt, i) => (
-                                        <div key={i} className="flex gap-2 items-center">
+                                        <div key={i} className="flex gap-2 items-start">
                                             <input type="checkbox" checked={qPgkAnswers.includes(opt) && opt !== ''} onChange={(e) => {
                                                 if(e.target.checked) setQPgkAnswers([...qPgkAnswers, opt]);
                                                 else setQPgkAnswers(qPgkAnswers.filter(a => a !== opt));
-                                            }} className="w-4 h-4 accent-blue-600" />
-                                            <input type="text" required className="flex-1 border p-1.5 rounded text-sm" placeholder={`Opsi ${i+1}`} value={opt} onChange={e => {
+                                            }} className="w-4 h-4 accent-blue-600 mt-2" />
+                                            <textarea required className="flex-1 border p-1.5 rounded text-sm min-h-[40px]" placeholder={`Opsi ${i+1} (Dukung HTML/Teks/Rumus)`} value={opt} onChange={e => {
                                                 const oldOpt = qOptions[i];
                                                 const newOpts = [...qOptions];
                                                 newOpts[i] = e.target.value;
@@ -1339,11 +1480,31 @@
                                                     setQPgkAnswers(qPgkAnswers.map(a => a === oldOpt ? e.target.value : a));
                                                 }
                                             }} />
+                                            <label className="cursor-pointer text-blue-600 p-1.5 hover:bg-blue-50 rounded mt-1" title="Sisipkan Gambar">
+                                                <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if(file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (evt) => {
+                                                            const oldOpt = qOptions[i];
+                                                            const newOpts = [...qOptions];
+                                                            const imgHtml = `<img src="${evt.target.result}" style="max-height:100px; display:block; margin-top:5px;"/>`;
+                                                            newOpts[i] = newOpts[i] + imgHtml;
+                                                            setQOptions(newOpts);
+                                                            if(qPgkAnswers.includes(oldOpt)) {
+                                                                setQPgkAnswers(qPgkAnswers.map(a => a === oldOpt ? newOpts[i] : a));
+                                                            }
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }} />
+                                                <Icons.Image />
+                                            </label>
                                             <button type="button" onClick={() => {
                                                 const newOpts = qOptions.filter((_, idx) => idx !== i);
                                                 setQOptions(newOpts);
                                                 setQPgkAnswers(qPgkAnswers.filter(a => a !== opt));
-                                            }} className="text-red-500 font-bold px-2">&times;</button>
+                                            }} className="text-red-500 font-bold px-2 mt-2">&times;</button>
                                         </div>
                                     ))}
                                     <button type="button" onClick={() => setQOptions([...qOptions, ''])} className="text-blue-600 text-xs font-semibold">+ Tambah Opsi</button>
@@ -1354,13 +1515,29 @@
                                 <div className="space-y-2 border-t pt-2">
                                     <label className="block text-sm font-medium">Pernyataan (Benar / Salah)</label>
                                     {qBsStatements.map((item, i) => (
-                                        <div key={i} className="flex gap-2 items-center">
-                                            <input type="text" required className="flex-1 border p-1.5 rounded text-sm" placeholder="Tulis pernyataan..." value={item.stmt} onChange={e => {
+                                        <div key={i} className="flex gap-2 items-start">
+                                            <textarea required className="flex-1 border p-1.5 rounded text-sm min-h-[40px]" placeholder="Tulis pernyataan (Dukung HTML)..." value={item.stmt} onChange={e => {
                                                 const newStmts = [...qBsStatements];
                                                 newStmts[i].stmt = e.target.value;
                                                 setQBsStatements(newStmts);
                                             }} />
-                                            <select className="border p-1.5 rounded text-sm font-medium" value={item.val} onChange={e => {
+                                            <label className="cursor-pointer text-blue-600 p-1.5 hover:bg-blue-50 rounded mt-1" title="Sisipkan Gambar">
+                                                <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if(file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (evt) => {
+                                                            const newStmts = [...qBsStatements];
+                                                            const imgHtml = `<img src="${evt.target.result}" style="max-height:100px; display:block; margin-top:5px;"/>`;
+                                                            newStmts[i].stmt = newStmts[i].stmt + imgHtml;
+                                                            setQBsStatements(newStmts);
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }} />
+                                                <Icons.Image />
+                                            </label>
+                                            <select className="border p-1.5 rounded text-sm font-medium mt-1" value={item.val} onChange={e => {
                                                 const newStmts = [...qBsStatements];
                                                 newStmts[i].val = e.target.value;
                                                 setQBsStatements(newStmts);
@@ -1368,7 +1545,7 @@
                                                 <option value="B">Benar</option>
                                                 <option value="S">Salah</option>
                                             </select>
-                                            <button type="button" onClick={() => setQBsStatements(qBsStatements.filter((_, idx) => idx !== i))} className="text-red-500 font-bold px-2">&times;</button>
+                                            <button type="button" onClick={() => setQBsStatements(qBsStatements.filter((_, idx) => idx !== i))} className="text-red-500 font-bold px-2 mt-2">&times;</button>
                                         </div>
                                     ))}
                                     <button type="button" onClick={() => setQBsStatements([...qBsStatements, {stmt:'', val:'B'}])} className="text-blue-600 text-xs font-semibold">+ Tambah Pernyataan</button>
@@ -1378,19 +1555,36 @@
                             {qType === 'JODOH' && (
                                 <div className="space-y-2 border-t pt-2">
                                     <label className="block text-sm font-medium">Pasangan Menjodohkan</label>
+                                    <p className="text-xs text-orange-600 mb-2">Catatan: Opsi Kanan (Jawaban) tidak mendukung Gambar karena menggunakan menu Dropdown.</p>
                                     {qJodohPairs.map((pair, i) => (
-                                        <div key={i} className="flex gap-2 items-center">
-                                            <input type="text" required className="flex-1 border p-1.5 rounded text-sm" placeholder="Pertanyaan (Kiri)" value={pair.left} onChange={e => {
+                                        <div key={i} className="flex gap-2 items-start">
+                                            <textarea required className="flex-1 border p-1.5 rounded text-sm min-h-[40px]" placeholder="Pertanyaan Kiri (Dukung HTML)" value={pair.left} onChange={e => {
                                                 const newPairs = [...qJodohPairs];
                                                 newPairs[i].left = e.target.value;
                                                 setQJodohPairs(newPairs);
                                             }} />
-                                            <input type="text" required className="flex-1 border p-1.5 rounded text-sm" placeholder="Jawaban (Kanan)" value={pair.right} onChange={e => {
+                                            <label className="cursor-pointer text-blue-600 p-1.5 hover:bg-blue-50 rounded mt-1" title="Sisipkan Gambar (Kiri)">
+                                                <input type="file" className="hidden" accept="image/*" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if(file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (evt) => {
+                                                            const newPairs = [...qJodohPairs];
+                                                            const imgHtml = `<img src="${evt.target.result}" style="max-height:100px; display:block; margin-top:5px;"/>`;
+                                                            newPairs[i].left = newPairs[i].left + imgHtml;
+                                                            setQJodohPairs(newPairs);
+                                                        };
+                                                        reader.readAsDataURL(file);
+                                                    }
+                                                }} />
+                                                <Icons.Image />
+                                            </label>
+                                            <textarea required className="flex-1 border p-1.5 rounded text-sm min-h-[40px]" placeholder="Jawaban Kanan (Teks Murni)" value={pair.right} onChange={e => {
                                                 const newPairs = [...qJodohPairs];
                                                 newPairs[i].right = e.target.value;
                                                 setQJodohPairs(newPairs);
                                             }} />
-                                            <button type="button" onClick={() => setQJodohPairs(qJodohPairs.filter((_, idx) => idx !== i))} className="text-red-500 font-bold px-2">&times;</button>
+                                            <button type="button" onClick={() => setQJodohPairs(qJodohPairs.filter((_, idx) => idx !== i))} className="text-red-500 font-bold px-2 mt-2">&times;</button>
                                         </div>
                                     ))}
                                     <button type="button" onClick={() => setQJodohPairs([...qJodohPairs, {left:'', right:''}])} className="text-blue-600 text-xs font-semibold">+ Tambah Pasangan</button>
@@ -1426,27 +1620,38 @@
                         </form>
                     </Modal>
 
-                    <Modal isOpen={showUploadModal} title="Import Soal Excel" onClose={() => setShowUploadModal(false)}>
+                    <Modal isOpen={showUploadModal} title="Import Soal Excel" onClose={() => setShowUploadModal(false)} maxWidth="max-w-3xl">
                         <div className="space-y-4">
                             <div className="bg-blue-50 text-blue-800 p-4 rounded-lg text-sm border border-blue-100">
                                 <p className="font-bold mb-2">Format Header Kolom Excel (Baris Pertama):</p>
                                 <ul className="list-disc pl-5 space-y-1.5 text-xs">
                                     <li><b>PackageID</b>: ID Paket tujuan (contoh: MAT-1)</li>
                                     <li><b>Jenis</b>: PG, PGK, BS, JODOH, atau ISIAN</li>
-                                    <li><b>Soal</b>: Teks pertanyaan</li>
-                                    <li><b>Opsi</b>: Pisahkan antar pilihan dengan tanda <code className="bg-white text-blue-600 px-1 py-0.5 rounded font-bold border">|</code> (Garis Lurus/Pipa). Kosongkan jika ISIAN.</li>
+                                    <li><b>Soal</b>: Teks pertanyaan (Mendukung tag HTML standar seperti &lt;b&gt;, &lt;i&gt; atau &lt;img src="..."&gt;)</li>
+                                    <li><b>Opsi</b>: Pisahkan antar pilihan dengan tanda <code className="bg-white text-blue-600 px-1 py-0.5 rounded font-bold border">|</code> (Garis Lurus/Pipa). Opsi juga mendukung teks rumus matematika dan HTML. Kosongkan jika ISIAN.</li>
                                     <li><b>Kunci</b>: Jawaban benar. Untuk soal dengan jawaban banyak (PGK/BS/JODOH/ISIAN), pisahkan juga dengan <code className="bg-white text-blue-600 px-1 py-0.5 rounded font-bold border">|</code></li>
                                     <li><b>Bobot</b>: Angka bobot soal (contoh: 10)</li>
                                 </ul>
                             </div>
                             
-                            <button onClick={downloadTemplate} className="w-full flex justify-center items-center bg-indigo-100 text-indigo-700 py-2.5 rounded-lg font-bold hover:bg-indigo-200 border border-indigo-200 transition shadow-sm">
-                                <Icons.Download /> <span className="ml-2">Unduh Format Excel (Template)</span>
+                            <button onClick={downloadTemplate} className="w-full flex justify-center items-center bg-indigo-100 text-indigo-700 py-2.5 rounded-lg font-bold hover:bg-indigo-200 border border-indigo-200 transition shadow-sm mb-2">
+                                <Icons.Download /> <span className="ml-2">Unduh Format (Template)</span>
                             </button>
 
                             <div className="border-t pt-4">
-                                <label className="block text-sm font-medium mb-1 text-gray-700">Upload File Excel yang Sudah Diisi (.xlsx)</label>
-                                <input type="file" accept=".xlsx, .xls" onChange={handleExcelUpload} className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-50" />
+                                <label className="block text-sm font-medium mb-1 text-gray-700">Tarik dari Link URL (Raw Excel/CSV)</label>
+                                <div className="flex gap-2">
+                                    <input type="url" placeholder="https://..." value={uploadTargetUrl} onChange={(e) => setUploadTargetUrl(e.target.value)} className="flex-1 border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-50 text-sm" />
+                                    <button onClick={handleUrlImport} disabled={isLoadingUrl} className="bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+                                        {isLoadingUrl ? 'Menarik...' : 'Tarik Data'}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">Gunakan direct link file (misal: Google Drive direct link, Raw GitHub, dll).</p>
+                            </div>
+
+                            <div className="border-t pt-4">
+                                <label className="block text-sm font-medium mb-1 text-gray-700">Upload File Komputer (.xlsx, .csv)</label>
+                                <input type="file" accept=".xlsx, .xls, .csv" onChange={handleExcelUpload} className="w-full border border-gray-300 p-2.5 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-gray-50" />
                             </div>
                         </div>
                     </Modal>
